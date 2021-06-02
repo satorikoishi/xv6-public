@@ -94,6 +94,16 @@ sys_uptime(void)
 
 int
 sys_settickets(void) {
+  int num_tickets = 0;
+  if (argint(0, &num_tickets) < 0) {
+    return -1;
+  }
+
+  acquire(&ptable.lock);
+  myproc()->tickets += num_tickets;
+  ptable.total_tickets += num_tickets;
+  release(&ptable.lock);
+
   return 0;
 }
 
@@ -120,6 +130,7 @@ sys_getpinfo(void) {
       // cprintf("system call: proc pid %d, name %s\n", p->pid, p->name);
     }
   }
+  // cprintf("total tickets %d\n", ptable.total_tickets);
 
   release(&ptable.lock);
 

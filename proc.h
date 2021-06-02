@@ -59,6 +59,7 @@ struct proc {
 struct proctable{
   struct spinlock lock;
   struct proc proc[NPROC];
+  uint total_tickets;
 };
 
 // Process memory is laid out contiguously, low addresses first:

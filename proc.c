@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "rand.h"
 
 struct proctable ptable;
 
@@ -85,6 +86,10 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  // by default, each process get one ticket
+  p->tickets = 1;
+  ++ptable.total_tickets;
+  // cprintf("alloc proc, total ticket %d\n", ptable.total_tickets);
 
   release(&ptable.lock);
 
@@ -212,7 +217,13 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
-
+  // child process inherits tickets
+  if (curproc->tickets != 1) {
+    np->tickets = curproc->tickets;
+    ptable.total_tickets += np->tickets - 1;
+    // cprintf("fork, added ticket %d, total ticket %d\n", np->tickets, ptable.total_tickets);
+  }
+  
   release(&ptable.lock);
 
   return pid;
@@ -245,6 +256,12 @@ exit(void)
   curproc->cwd = 0;
 
   acquire(&ptable.lock);
+
+  // remove lottery held
+  uint held_tickets = curproc->tickets;
+  ptable.total_tickets -= held_tickets;
+  curproc->tickets = 0;
+  // cprintf("proc exit, removed ticket %d, total ticket %d\n", held_tickets, ptable.total_tickets);
 
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
@@ -329,10 +346,29 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
 
+    // generate random byte
+    uint rand = genrand();
+    rand %= ptable.total_tickets;
+    
+    uint acc = 0;
+    int flag = 0;
+
+    // check winner
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if (p->state == ZOMBIE || p->state == UNUSED) {
+        continue;
+      } else {
+        acc += p->tickets;
+        if (acc > rand && p->state == RUNNABLE) {
+          // win
+          flag = 1;
+          break;
+        }
+      }
+    }
+
+    if (flag) {
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -351,6 +387,30 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       c->proc = 0;
     }
+    // else regenerate random byte
+
+    // for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    //   if(p->state != RUNNABLE)
+    //     continue;
+
+    //   // Switch to chosen process.  It is the process's job
+    //   // to release ptable.lock and then reacquire it
+    //   // before jumping back to us.
+    //   c->proc = p;
+
+    //   // process tick++
+    //   ++p->ticks;
+
+    //   switchuvm(p);
+    //   p->state = RUNNING;
+
+    //   swtch(&(c->scheduler), p->context);
+    //   switchkvm();
+
+    //   // Process is done running for now.
+    //   // It should have changed its p->state before coming back.
+    //   c->proc = 0;
+    // }
     release(&ptable.lock);
 
   }
