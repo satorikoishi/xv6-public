@@ -7,6 +7,8 @@
 #include "mmu.h"
 #include "proc.h"
 
+extern struct proctable ptable;
+
 int
 sys_fork(void)
 {
@@ -97,5 +99,29 @@ sys_settickets(void) {
 
 int
 sys_getpinfo(void) {
+  struct pstat *proc_stat = 0;
+  if (argptr(0, (void *)&proc_stat, sizeof(*proc_stat)) < 0 || proc_stat == 0) {
+    return -1;
+  }
+
+  struct proc* p;
+
+  acquire(&ptable.lock);
+
+  for(int i = 0; i < NPROC; ++i) {
+    p = &ptable.proc[i];
+    if (p->state == UNUSED) {
+      proc_stat->inuse[i] = 0;
+    } else {
+      proc_stat->inuse[i] = 1;
+      proc_stat->pid[i] = p->pid;
+      proc_stat->ticks[i] = p->ticks;
+      proc_stat->tickets[i] = p->tickets;
+      // cprintf("system call: proc pid %d, name %s\n", p->pid, p->name);
+    }
+  }
+
+  release(&ptable.lock);
+
   return 0;
 }

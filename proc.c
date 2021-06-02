@@ -7,10 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} ptable;
+struct proctable ptable;
 
 static struct proc *initproc;
 
@@ -340,6 +337,10 @@ scheduler(void)
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       c->proc = p;
+
+      // process tick++
+      ++p->ticks;
+
       switchuvm(p);
       p->state = RUNNING;
 
